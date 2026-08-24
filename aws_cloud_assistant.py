@@ -199,6 +199,85 @@ def get_iam_security_data():
 
     return iam_security_data
 # ---------------------------
+#  IAM POLICY DOCUMENTS.
+# ---------------------------
+def get_iam_policy_documents():
+
+    response = iam.list_users()
+
+    users = response["Users"]
+
+    if not users:
+        return "No IAM users found."
+
+    policy_data = "IAM POLICY DOCUMENTS:\n"
+
+    for user in users:
+
+        username = user["UserName"]
+
+        policy_data += f"\nUSER: {username}\n"
+
+        # -------------------------
+        # MANAGED POLICIES
+        # -------------------------
+
+        attached = iam.list_attached_user_policies(
+            UserName=username
+        )
+
+        for policy in attached["AttachedPolicies"]:
+
+            policy_name = policy["PolicyName"]
+            policy_arn = policy["PolicyArn"]
+
+            policy_info = iam.get_policy(
+                PolicyArn=policy_arn
+            )
+
+            default_version = policy_info["Policy"]["DefaultVersionId"]
+
+            version = iam.get_policy_version(
+                PolicyArn=policy_arn,
+                VersionId=default_version
+            )
+
+            document = version["PolicyVersion"]["Document"]
+
+            policy_data += f"""
+Managed Policy: {policy_name}
+Policy ARN: {policy_arn}
+Policy Document:
+{document}
+"""
+
+        # -------------------------
+        # INLINE POLICIES
+        # -------------------------
+
+        inline = iam.list_user_policies(
+            UserName=username
+        )
+
+        for policy_name in inline["PolicyNames"]:
+
+            inline_policy = iam.get_user_policy(
+                UserName=username,
+                PolicyName=policy_name
+            )
+
+            document = inline_policy["PolicyDocument"]
+
+            policy_data += f"""
+Inline Policy: {policy_name}
+Policy Document:
+{document}
+"""
+
+        policy_data += "\n-------------------------\n"
+
+    return policy_data
+# ---------------------------
 # GET CLOUDWATCH INFORMATION
 # ---------------------------
 def get_cloudwatch_data():
@@ -243,51 +322,64 @@ router_response = client.chat.completions.create(
             "role": "system",
 
             "content": """
-You are ONLY an AWS service classification system.
+You are an AWS question router.
 
-You MUST return exactly ONE of these words:
+Classify the user's question into exactly ONE of these categories:
 
 EC2
 S3
 IAM
-MULTI
-HEALTH
 CLOUDWATCH
 SECURITY
+HEALTH
+MULTI
 UNKNOWN
 
 Rules:
 
-EC2 = question about EC2 instances or compute.
+EC2:
+Questions about EC2 instances, instance IDs, instance state,
+instance type, IP addresses, availability zones, or compute resources.
 
-S3 = question about S3 buckets or objects.
+S3:
+Questions about S3 buckets, objects, object counts, bucket size,
+or S3 resources.
 
-IAM = question about IAM users, roles, policies,
-or permissions.
+IAM:
+Questions about IAM users, IAM roles, IAM groups, or basic IAM information.
 
-MULTI = question asking for an overview or
-information from multiple AWS services.
+CLOUDWATCH:
+Questions about CloudWatch alarms, metrics, or monitoring information.
 
-HEALTH = question asking about the health,
-problems, risks, issues, or overall condition
-of the AWS environment.
+SECURITY:
+Questions about IAM security, permissions, attached policies,
+inline policies, policy documents, excessive permissions,
+least privilege, or security concerns.
 
-CLOUDWATCH = questions about CloudWatch alarms or monitoring.
+HEALTH:
+Questions asking whether the AWS environment is healthy,
+safe, or operating normally.
 
-SECURITY = questions about IAM permissions, policies,
-access levels, excessive permissions, or security concerns.
+MULTI:
+Questions requiring information from multiple AWS services.
 
-UNKNOWN = anything else.
+UNKNOWN:
+Questions that do not relate to the available AWS services.
 
-IMPORTANT:
+Important:
+If the user asks something like:
+"Are there any IAM security concerns?"
+"Is my IAM secure?"
+"Do I have excessive IAM permissions?"
+"Which users have broad permissions?"
+"Are any IAM policies too permissive?"
 
-Return ONLY ONE WORD from the list above.
+classify the question as:
 
-Do NOT explain.
+SECURITY
 
-Do NOT write a sentence.
-
-Do NOT use punctuation.
+Return ONLY the category name.
+Do not explain your answer.
 """
         },
 
@@ -405,10 +497,16 @@ elif service == "SECURITY":
 
     iam_security_data = get_iam_security_data()
 
+    iam_policy_documents = get_iam_policy_documents()
+
     aws_data = f"""
 IAM SECURITY INFORMATION:
 
 {iam_security_data}
+
+IAM POLICY DOCUMENTS:
+
+{iam_policy_documents}
 """
 
 else:
@@ -467,20 +565,36 @@ require additional AWS data.
 
 For SECURITY questions:
 
-Analyze the provided IAM security information.
+Analyze the provided IAM users, attached policies,
+inline policies, and actual IAM policy documents.
 
-Identify permissions that may deserve review.
+Identify permissions that may be broader than necessary.
 
-Do not automatically classify a permission as a
-security vulnerability.
+Pay particular attention to:
 
-Explain why a permission may be broader than necessary.
+- Full administrative permissions
+- Wildcard actions such as "*"
+- Wildcard resources such as "*"
+- Permissions that allow modifying or deleting resources
+- Differences between read-only and write permissions
+- Permissions that may violate least-privilege principles
 
-Clearly distinguish confirmed permissions from
-potential security concerns.
+Do not automatically classify a broad permission as
+a security vulnerability.
 
-Do not invent IAM policies or permissions that were
-not provided.
+Explain why a permission may deserve review.
+
+Clearly distinguish:
+
+1. Confirmed permissions from the policy documents.
+2. Potential security concerns.
+3. Information that is still missing.
+
+Do not invent permissions that are not present in
+the provided policy documents.
+
+Do not recommend changing or deleting permissions
+without explaining the reason and potential impact.
 
 Do NOT invent CloudWatch metrics, AWS Health
 Dashboard events, Trusted Advisor findings,
@@ -509,4 +623,5 @@ answer = response.choices[0].message.content
 
 print("\nCLOUD ASSISTANT:")
 print(answer)
+
 
