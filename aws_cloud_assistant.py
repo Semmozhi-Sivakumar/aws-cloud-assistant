@@ -183,6 +183,95 @@ Public Access Block:
         security_data += "\n-------------------------\n"
 
     return security_data
+# ------------------------
+# S3 ACCESS POLICY 
+# ------------------------
+def get_s3_access_policy_data():
+
+    s3 = boto3.client("s3")
+
+    response = s3.list_buckets()
+
+    buckets = response.get("Buckets", [])
+
+    if not buckets:
+        return "No S3 buckets found."
+
+    access_data = "S3 ACCESS CONTROL INFORMATION:\n"
+
+    for bucket in buckets:
+
+        bucket_name = bucket["Name"]
+
+        access_data += f"\nBucket: {bucket_name}\n"
+
+        # -------------------------
+        # BUCKET POLICY
+        # -------------------------
+
+        try:
+
+            policy_response = s3.get_bucket_policy(
+                Bucket=bucket_name
+            )
+
+            policy = policy_response["Policy"]
+
+            access_data += f"""
+Bucket Policy:
+{policy}
+"""
+
+        except s3.exceptions.ClientError as e:
+
+            error_code = e.response["Error"]["Code"]
+
+            if error_code == "NoSuchBucketPolicy":
+                access_data += "Bucket Policy: None configured.\n"
+            else:
+                access_data += (
+                    f"Bucket Policy: Unable to retrieve ({error_code})\n"
+                )
+
+        # -------------------------
+        # BUCKET ACL
+        # -------------------------
+
+        try:
+
+            acl_response = s3.get_bucket_acl(
+                Bucket=bucket_name
+            )
+
+            access_data += "\nBucket ACL:\n"
+
+            for grant in acl_response.get("Grants", []):
+
+                grantee = grant.get("Grantee", {})
+                permission = grant.get("Permission")
+
+                grantee_type = grantee.get("Type")
+                grantee_uri = grantee.get("URI")
+                grantee_display_name = grantee.get(
+                    "DisplayName"
+                )
+
+                access_data += (
+                    f"- Type: {grantee_type}, "
+                    f"Permission: {permission}, "
+                    f"URI: {grantee_uri}, "
+                    f"DisplayName: {grantee_display_name}\n"
+                )
+
+        except Exception as e:
+
+            access_data += (
+                f"Bucket ACL: Unable to retrieve ({e})\n"
+            )
+
+        access_data += "\n-------------------------\n"
+
+    return access_data
 
 # -------------------------
 # GET S3 INFORMATION
@@ -418,6 +507,36 @@ def get_cloudwatch_data():
 
     return cloudwatch_data
 
+def get_cloudwatch_health_data():
+
+    cloudwatch = boto3.client("cloudwatch")
+
+    response = cloudwatch.describe_alarms()
+
+    alarms = response.get("MetricAlarms", [])
+
+    if not alarms:
+        return "No CloudWatch metric alarms found."
+
+    health_data = "CLOUDWATCH HEALTH INFORMATION:\n"
+
+    for alarm in alarms:
+
+        health_data += f"""
+Alarm Name: {alarm.get("AlarmName")}
+State: {alarm.get("StateValue")}
+State Reason: {alarm.get("StateReason")}
+Metric: {alarm.get("MetricName")}
+Namespace: {alarm.get("Namespace")}
+Statistic: {alarm.get("Statistic")}
+Threshold: {alarm.get("Threshold")}
+Comparison: {alarm.get("ComparisonOperator")}
+"""
+
+        health_data += "\n-------------------------\n"
+
+    return health_data
+
 # -------------------------
 # ASK USER
 # -------------------------
@@ -643,10 +762,16 @@ elif service == "S3_SECURITY":
 
     s3_security_data = get_s3_security_data()
 
+    s3_access_data = get_s3_access_policy_data()
+
     aws_data = f"""
 S3 SECURITY INFORMATION:
 
 {s3_security_data}
+
+S3 ACCESS CONTROL INFORMATION:
+
+{s3_access_data}
 """    
 
 else:
@@ -736,6 +861,44 @@ the provided policy documents.
 Do not recommend changing or deleting permissions
 without explaining the reason and potential impact.
 
+For S3_SECURITY questions:
+
+Analyze:
+
+- Public Access Block settings
+- Server-side encryption
+- Versioning
+- Bucket policies
+- Bucket ACLs
+
+Pay particular attention to:
+
+- Principal "*"
+- Allow statements
+- s3:GetObject
+- s3:PutObject
+- s3:DeleteObject
+- s3:*
+- Public or cross-account access
+
+Clearly distinguish confirmed access permissions
+from potential security concerns.
+
+If a bucket policy contains:
+Principal: "*"
+with:
+Effect: Allow
+and an object-access action such as s3:GetObject,
+
+identify this as confirmed public access unless
+the provided AWS data shows a restriction that prevents it.
+
+Do not claim that a bucket is completely insecure
+based on one finding alone.
+
+Do not invent missing bucket policies, ACLs,
+encryption settings, or permissions.
+
 Do NOT invent CloudWatch metrics, AWS Health
 Dashboard events, Trusted Advisor findings,
 IAM policies, S3 permissions, or other data
@@ -764,3 +927,5 @@ answer = response.choices[0].message.content
 print("\nCLOUD ASSISTANT:")
 print(answer)
 
+print("\nCLOUDWATCH HEALTH TEST:")
+print(get_cloudwatch_health_data())
