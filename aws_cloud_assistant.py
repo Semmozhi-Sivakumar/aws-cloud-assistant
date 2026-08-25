@@ -68,6 +68,121 @@ def get_ec2_data():
         )
 
     return aws_data
+# ----------------------------
+# GET S3 SECURITY INFORMATION 
+# ----------------------------
+def get_s3_security_data():
+
+    s3 = boto3.client("s3")
+
+    response = s3.list_buckets()
+
+    buckets = response.get("Buckets", [])
+
+    if not buckets:
+        return "No S3 buckets found."
+
+    security_data = "S3 SECURITY INFORMATION:\n"
+
+    for bucket in buckets:
+
+        bucket_name = bucket["Name"]
+
+        security_data += f"\nBucket: {bucket_name}\n"
+
+        # -------------------------
+        # PUBLIC ACCESS BLOCK
+        # -------------------------
+
+        try:
+
+            public_access = s3.get_public_access_block(
+                Bucket=bucket_name
+            )
+
+            config = public_access[
+                "PublicAccessBlockConfiguration"
+            ]
+
+            security_data += f"""
+Public Access Block:
+- BlockPublicAcls: {config.get("BlockPublicAcls")}
+- IgnorePublicAcls: {config.get("IgnorePublicAcls")}
+- BlockPublicPolicy: {config.get("BlockPublicPolicy")}
+- RestrictPublicBuckets: {config.get("RestrictPublicBuckets")}
+"""
+
+        except Exception as e:
+
+            security_data += (
+                f"Public Access Block: Unable to retrieve ({e})\n"
+            )
+
+        # -------------------------
+        # ENCRYPTION
+        # -------------------------
+
+        try:
+
+            encryption = s3.get_bucket_encryption(
+                Bucket=bucket_name
+            )
+
+            rules = encryption[
+                "ServerSideEncryptionConfiguration"
+            ]["Rules"]
+
+            security_data += "Encryption:\n"
+
+            for rule in rules:
+
+                default_encryption = rule.get(
+                    "ApplyServerSideEncryptionByDefault",
+                    {}
+                )
+
+                algorithm = default_encryption.get(
+                    "SSEAlgorithm"
+                )
+
+                security_data += (
+                    f"- Algorithm: {algorithm}\n"
+                )
+
+        except s3.exceptions.ClientError:
+
+            security_data += (
+                "Encryption: No default bucket encryption configuration found.\n"
+            )
+
+        # -------------------------
+        # VERSIONING
+        # -------------------------
+
+        try:
+
+            versioning = s3.get_bucket_versioning(
+                Bucket=bucket_name
+            )
+
+            status = versioning.get(
+                "Status",
+                "Disabled"
+            )
+
+            security_data += (
+                f"Versioning: {status}\n"
+            )
+
+        except Exception as e:
+
+            security_data += (
+                f"Versioning: Unable to retrieve ({e})\n"
+            )
+
+        security_data += "\n-------------------------\n"
+
+    return security_data
 
 # -------------------------
 # GET S3 INFORMATION
@@ -331,6 +446,7 @@ S3
 IAM
 CLOUDWATCH
 SECURITY
+S3_SECURITY
 HEALTH
 MULTI
 UNKNOWN
@@ -359,6 +475,20 @@ least privilege, or security concerns.
 HEALTH:
 Questions asking whether the AWS environment is healthy,
 safe, or operating normally.
+
+S3_SECURITY:
+Questions about S3 bucket security, public access,
+encryption, versioning, bucket security configuration,
+or whether an S3 bucket is securely configured.
+
+Examples:
+"Is my S3 bucket secure?"
+"Is my S3 bucket public?"
+"Is encryption enabled on my S3 bucket?"
+"Is S3 versioning enabled?"
+"Are there any S3 security concerns?"
+
+Classify these questions as S3_SECURITY.
 
 MULTI:
 Questions requiring information from multiple AWS services.
@@ -413,6 +543,7 @@ valid_services = {
     "CLOUDWATCH",
     "MULTI",
     "HEALTH",
+    "S3_SECURITY",
     "SECURITY",
     "UNKNOWN"
 }
@@ -508,6 +639,15 @@ IAM POLICY DOCUMENTS:
 
 {iam_policy_documents}
 """
+elif service == "S3_SECURITY":
+
+    s3_security_data = get_s3_security_data()
+
+    aws_data = f"""
+S3 SECURITY INFORMATION:
+
+{s3_security_data}
+"""    
 
 else:
 
@@ -623,5 +763,4 @@ answer = response.choices[0].message.content
 
 print("\nCLOUD ASSISTANT:")
 print(answer)
-
 
