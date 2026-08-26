@@ -715,27 +715,42 @@ elif service == "HEALTH":
 
     s3_data = get_s3_data()
 
-    iam_data = get_iam_data()
+    s3_security_data = get_s3_security_data()
 
-    cloudwatch_data = get_cloudwatch_data()
+    s3_access_data = get_s3_access_policy_data()
+
+    iam_data = get_iam_security_data()
+
+    iam_policy_data = get_iam_policy_documents()
+
+    cloudwatch_data = get_cloudwatch_health_data()
 
     aws_data = f"""
 EC2 INFORMATION:
 
 {ec2_data}
 
-
 S3 INFORMATION:
 
 {s3_data}
 
+S3 SECURITY INFORMATION:
 
-IAM INFORMATION:
+{s3_security_data}
+
+S3 ACCESS CONTROL INFORMATION:
+
+{s3_access_data}
+
+IAM SECURITY INFORMATION:
 
 {iam_data}
 
+IAM POLICY DOCUMENTS:
 
-CLOUDWATCH INFORMATION:
+{iam_policy_data}
+
+CLOUDWATCH HEALTH INFORMATION:
 
 {cloudwatch_data}
 """
@@ -813,20 +828,35 @@ data is required.
 
 For HEALTH questions:
 
-Analyze the provided EC2, S3, IAM, and CloudWatch information.
+Assess the AWS environment ONLY using the AWS data provided.
 
-Use CloudWatch alarm information as monitoring evidence.
+Consider:
 
-If no CloudWatch alarms are found, state that as a
-confirmed fact.
+- EC2 information
+- S3 information
+- IAM information
+- CloudWatch information
 
-Do not interpret the absence of CloudWatch alarms as
-proof that the entire AWS environment is healthy.
+Clearly separate:
 
-Identify reasonable areas that may need attention.
+1. Confirmed healthy/normal observations
+2. Potential concerns
+3. Missing monitoring or configuration data
 
-Clearly separate confirmed facts from areas that
-require additional AWS data.
+Important:
+
+"No CloudWatch alarms found" does NOT mean the AWS
+environment is healthy.
+
+Do not claim the environment is healthy unless the
+provided data supports that conclusion.
+
+Do not invent AWS resources, metrics, alarms,
+configurations, or health events.
+
+If the provided data is insufficient for a complete
+health assessment, clearly state what additional data
+would be required.
 
 For SECURITY questions:
 
@@ -927,5 +957,3 @@ answer = response.choices[0].message.content
 print("\nCLOUD ASSISTANT:")
 print(answer)
 
-print("\nCLOUDWATCH HEALTH TEST:")
-print(get_cloudwatch_health_data())
